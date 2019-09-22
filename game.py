@@ -12,21 +12,20 @@ print(sys.version)
 
 for s in js.document.getElementsByTagName('style'):
   s.remove()
-for s in js.document.getElementsByTagName('link'):
-  s.remove()
 def loadfont(name):
   link = js.document.createElement('link')
   link.setAttribute('rel', 'stylesheet')
   link.setAttribute('href', f'https://fonts.googleapis.com/css?family={name.replace(" ", "+")}&display=swap')
   js.document.head.appendChild(link)
-loadfont('Cinzel Decorative')
-loadfont('Metamorphous')
 style = js.document.createElement('style')
 S = 2
+COLORS = ['#8363ad', '#58a23c', '#5a4142', '#3e489d', '#c14867']
+CS = len(COLORS)
+color_styles = '\n'.join(f'.color-{i} {{ background: {c}; }}' for (i, c) in enumerate(COLORS))
 style.innerHTML = f'''
 
 body {{
-  background: #786aff;
+  background: #a7b5ba;
   font-family: Metamorphous, sans-serif;
   font-size: 1vw;
   color: #f0e9cf;
@@ -57,22 +56,10 @@ h2 {{
   border: 1px solid #0b0b0b;
   border-radius: 0.3vw;
 }}
-
-.color-0 {{
-  background: #8363ad;
+.clicky {{
+  cursor: pointer;
 }}
-.color-1 {{
-  background: #58a23c;
-}}
-.color-2 {{
-  background: #5a4142;
-}}
-.color-3 {{
-  background: #3e489d;
-}}
-.color-4 {{
-  background: #c14867;
-}}
+{ color_styles }
 
 .highlighted {{
   animation: blink 0.3s infinite alternate;
@@ -93,18 +80,20 @@ js.document.body.insertAdjacentHTML('beforeend', '''
 
 ''')
 
+def setpos(e, x, y):
+  e.setAttribute('style', f'left: {S * x}vw; top: {S * y}vw;')
+  e.x = x
+  e.y = y
 nextid = 0
 def add(cls, x, y, color):
   global nextid
   js.document.body.insertAdjacentHTML(
       'beforeend', f'<div class="{cls} color-{color}" id="{cls}-{nextid}"></div>')
   e = js.document.getElementById(f'{cls}-{nextid}')
-  e.setAttribute('style', f'left: {S * x}vw; top: {S * y}vw;')
+  e.color = color
+  setpos(e, x, y)
   nextid += 1
   return e
-
-def highlight(e):
-  e.classList.add('highlighted')
 
 def addbox(x, y, color):
   return add('box', x, y, color)
@@ -112,30 +101,147 @@ def addbox(x, y, color):
 def adddot(x, y, color):
   return add('dot', x, y, color)
 
-W = 6
 import random
 
-def randompattern():
+def randompattern(w):
   lastcolor = -1
   pattern = []
-  while len(pattern) < W:
-    c = random.randrange(5)
+  while len(pattern) < w:
+    c = random.randrange(CS)
     while c == lastcolor:
-      c = random.randrange(5)
+      c = random.randrange(CS)
     lastcolor = c
-    l = random.randrange(W)
-    if len(pattern) + l > W:
-      l = W - len(pattern)
+    l = random.randrange(5) + 1
+    if len(pattern) + l > w:
+      l = w - len(pattern)
     pattern += [c] * l
   return pattern
 
-p = randompattern()
-for i, c in enumerate(p):
-  b = adddot(10 + i, 10, c)
-b = addbox(11, 11, 4)
-b = addbox(12, 11, 3)
-b = addbox(13, 11, 2)
-b = addbox(14, 11, 1)
-b = addbox(15, 11, 0)
-highlight(b)
-print(b)
+def package(size):
+  cs = []
+  for i in range(size * size):
+    cs.append(random.randrange(CS))
+  base = random.randrange(CS)
+  cs.sort(key=lambda c: (c + base) % CS)
+  return cs
+
+def makepackage(x, y, size):
+  p = package(size)
+  boxes = []
+  for i, c in enumerate(p):
+    if (i // size) % 2 == 0:
+      b = addbox(x + i // size, y + 1 - size + i % size, c)
+    else:
+      b = addbox(x + i // size, y - i % size, c)
+    b.onmouseenter = lambda _, c=c: highlight(c, boxes)
+    b.onmouseleave = lambda _, c=c: unhighlight(c, boxes)
+    b.onclick = lambda _, c=c: click(c, boxes)
+    b.classList.add('clicky')
+    boxes.append(b)
+  return boxes
+
+def highlight(c, bs):
+  for b in bs + dots:
+    if b.color == c:
+      b.classList.add('highlighted')
+def unhighlight(c, bs):
+  for b in bs + dots:
+    if b.color == c:
+      b.classList.remove('highlighted')
+
+def click(c, bs):
+  if bs in caravan_boxes:
+    caravan_boxes.remove(bs)
+  unhighlight(c, bs + dots)
+  matching = 0
+  for b in bs:
+    b.remove()
+    if b.color == c:
+      matching += 1
+    else:
+      stacks[int(b.color)] += 1
+  update_stacks()
+  for d in dots[:]:
+    if d.color == c and matching:
+      d.remove()
+      dots.remove(d)
+      matching -= 1
+      t = addbox(d.x, d.y, c)
+      tower.append(t)
+  global garbage
+  garbage += matching
+  update_garbage()
+  if not dots:
+    new_floor()
+  check_caravan()
+
+def check_caravan():
+  if garbage == 0 and not caravan_boxes and sum(stacks) == 0:
+    new_caravan()
+
+garbage = 0
+garbage_boxes = []
+stacks = [0] * CS
+stack_boxes = [[] for _ in range(CS)]
+tower = []
+
+def update_pile(pile, x, y, count, color):
+  for b in pile:
+    b.remove()
+  del pile[:]
+  for i in range(count):
+    b = addbox(x, y - i, color)
+    if isinstance(color, str):
+      b.setAttribute('style', b.getAttribute('style') + f' background-color: {color};')
+    pile.append(b)
+
+def update_stacks():
+  for c, count in enumerate(stacks):
+    update_pile(stack_boxes[c], x + c, 11, count, c)
+    for b in stack_boxes[c]:
+      b.classList.add('clicky')
+      b.onmouseenter = lambda _, c=c: highlight(c, stack_boxes[c] + dots)
+      b.onmouseleave = lambda _, c=c: unhighlight(c, stack_boxes[c] + dots)
+      b.onclick = lambda _, c=c: clearandclick(c)
+  def clearandclick(c):
+    stacks[c] = 0
+    click(c, stack_boxes[c])
+
+def update_garbage():
+  update_pile(garbage_boxes, 1, 11, garbage, '#566262')
+  for b in garbage_boxes:
+    b.classList.add('clicky')
+    b.onmouseenter = lambda _, b=b: b.classList.add('highlighted')
+    b.onmouseleave = lambda _, b=b: b.classList.remove('highlighted')
+    b.onclick = lambda _: pop_garbage()
+  def pop_garbage():
+    global garbage
+    garbage -= 1
+    update_garbage()
+    check_caravan()
+
+tower_width = 10
+
+dots = []
+def new_floor():
+  for t in tower:
+    setpos(t, t.x, t.y + 1)
+  x = 3
+  p = randompattern(tower_width)
+  for c in p:
+    b = adddot(x, 11, c)
+    b.color = c
+    dots.append(b)
+    x += 1
+
+package_sizes = [3, 2, 2]
+caravan_boxes = []
+
+def new_caravan():
+  x = 6 + tower_width
+  for s in package_sizes:
+    caravan_boxes.append(makepackage(x, 10, s))
+    x += s + 2
+
+new_floor()
+new_caravan()
