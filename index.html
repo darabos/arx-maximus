@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <title>Arx Maximus</title>
+  </head>
+  <body>
+    <h1 id="loading">initializing...</h1>
+    <script src="/pyodide.js"></script>
+    <script>
+
+async function start() {
+  await languagePluginLoader;
+  let resp = await fetch('/game.py');
+  let game = await resp.text();
+  pyodide.runPython(game);
+}
+start().catch(err => console.error(err));
+
+    </script>
+  </body>
+</html>
