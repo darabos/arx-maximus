@@ -168,6 +168,12 @@ def click(c, bs):
       matching -= 1
       t = addbox(d.x, d.y, c)
       tower.append(t)
+      ds, _, _ = dotspan(int(d.index))
+      for d in ds:
+        d.classList.remove('clicky')
+        d.onclick = None
+        d.onmouseenter = None
+        d.onmouseleave = None
   global garbage
   garbage += matching
   update_garbage()
@@ -223,16 +229,59 @@ def update_garbage():
 tower_width = 10
 
 dots = []
+pattern = []
 def new_floor():
   for t in tower:
     setpos(t, t.x, t.y + 1)
   x = 3
-  p = randompattern(tower_width)
-  for c in p:
-    b = adddot(x, 11, c)
-    b.color = c
-    dots.append(b)
+  global pattern
+  pattern = randompattern(tower_width)
+  for i, c in enumerate(pattern):
+    d = adddot(x, 11, c)
+    d.color = c
+    d.index = i
+    d.onclick = lambda _, i=i: changedot(i)
+    d.onmouseenter = lambda _, i=i: highlightdot(i)
+    d.onmouseleave = lambda _, i=i: unhighlightdot(i)
+    d.classList.add('clicky')
+    dots.append(d)
     x += 1
+
+def dotspan(i):
+  c = pattern[i]
+  span = []
+  before = -1
+  after = -1
+  for j, p in enumerate(pattern):
+    if p == c:
+      span.append(j)
+    elif j < i:
+      span = []
+      before = p
+    else:
+      after = p
+      break
+  c2 = (c + 1) % CS
+  while c2 == before or c2 == after:
+    c2 = (c2 + 1) % CS
+  ds = [d for d in dots if d.index in span]
+  return ds, c, c2
+
+def changedot(i):
+  ds, c, c2 = dotspan(i)
+  for d in ds:
+    pattern[int(d.index)] = c2
+    d.color = c2
+    d.classList.remove(f'color-{c}')
+    d.classList.add(f'color-{c2}')
+def highlightdot(i):
+  ds, _, _ = dotspan(i)
+  for d in ds:
+    d.classList.add('highlighted')
+def unhighlightdot(i):
+  ds, _, _ = dotspan(i)
+  for d in ds:
+    d.classList.remove('highlighted')
 
 package_sizes = [3, 2, 2]
 caravan_boxes = []
